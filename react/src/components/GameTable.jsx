@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
 
-const API = '/api/game';
 const CARD_PATH = '/cards';
 
 const SUIT_MAP = { 'SPADES': 'SPADE', 'HEARTS': 'HEART', 'DIAMONDS': 'DIAMOND', 'CLUBS': 'CLUB' };
@@ -26,49 +27,89 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
   const [error, setError] = useState('');
   const [waitingForGame, setWaitingForGame] = useState(true);
   const [showDebug, setShowDebug] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const stompClientRef = useRef(null);
+  const myIndexRef = useRef(-1);
 
-  const fetchState = useCallback(async () => {
+  // Parse state from server
+  const handleStateUpdate = useCallback((data) => {
+    setGame(data);
+    if (data.players) {
+      setPlayers(data.players);
+      const idx = data.players.indexOf(playerName);
+      if (idx !== -1) {
+        setMyIndex(idx);
+        myIndexRef.current = idx;
+        setWaitingForGame(false);
+      }
+    }
+  }, [playerName]);
+
+  // Initial state fetch via REST
+  const fetchInitialState = useCallback(async () => {
     try {
-      const res = await fetch(API + '/state/' + roomCode);
-      if (res.status === 404) return;
-      if (!res.ok) return;
-      const data = await res.json();
-      setGame(data);
-      if (data.players) {
-        setPlayers(data.players);
-        const idx = data.players.indexOf(playerName);
-        if (idx !== -1) {
-          setMyIndex(idx);
-          setWaitingForGame(false);
-        }
+      const res = await fetch('/api/game/state/' + roomCode);
+      if (res.ok) {
+        const data = await res.json();
+        handleStateUpdate(data);
       }
     } catch (e) { /* ignore */ }
-  }, [roomCode, playerName]);
+  }, [roomCode, handleStateUpdate]);
 
+  // Connect to STOMP
   useEffect(() => {
-    const interval = setInterval(fetchState, 1000);
-    fetchState();
-    return () => clearInterval(interval);
-  }, []);
+    fetchInitialState();
 
-  const doAction = async (action, body) => {
-    try {
-      const payload = { roomCode: roomCode, playerIdx: myIndex, ...(body || {}) };
-      const res = await fetch(API + '/' + action, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.error) setError(data.error);
-      else setError('');
-      setSelectedCard(null);
-      setSelectedDefenseTarget(null);
-      fetchState();
-    } catch (e) {
-      setError('Connection error');
+    const socket = new SockJS('/api/ws', null, { transports: ['websocket', 'xhr-streaming', 'xhr-polling'] });
+    const client = new Client({
+      webSocketFactory: () => socket,
+      reconnectDelay: 3000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      onConnect: () => {
+        setConnected(true);
+        // Subscribe to game state updates for this room
+        client.subscribe('/topic/game/' + roomCode, (message) => {
+          const data = JSON.parse(message.body);
+          handleStateUpdate(data);
+        });
+        console.log('STOMP connected, subscribed to /topic/game/' + roomCode);
+      },
+      onDisconnect: () => {
+        setConnected(false);
+        console.log('STOMP disconnected');
+      },
+      onStompError: (frame) => {
+        console.error('STOMP error:', frame.headers['message']);
+        setConnected(false);
+      }
+    });
+
+    client.activate();
+    stompClientRef.current = client;
+
+    return () => {
+      if (stompClientRef.current) {
+        stompClientRef.current.deactivate();
+      }
+    };
+  }, [roomCode, fetchInitialState, handleStateUpdate]);
+
+  // Send game action via STOMP
+  const sendAction = useCallback((action, body) => {
+    if (!stompClientRef.current || !stompClientRef.current.connected) {
+      setError('Not connected to server');
+      return;
     }
-  };
+    const payload = { roomCode, playerIdx: myIndexRef.current, ...(body || {}) };
+    stompClientRef.current.publish({
+      destination: '/app/game/' + roomCode + '/' + action,
+      body: JSON.stringify(payload)
+    });
+    setSelectedCard(null);
+    setSelectedDefenseTarget(null);
+    setError('');
+  }, [roomCode]);
 
   const handleCardClick = (card, idx) => {
     if (!game || game.gameState === 'FINISHED' || myIndex === -1) return;
@@ -76,7 +117,7 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
       setSelectedCard(selectedCard === idx ? null : idx);
     } else if (game.gameState === 'DEFENDING' && game.defenderIdx === myIndex) {
       if (selectedDefenseTarget !== null) {
-        doAction('defend', { attackIdx: selectedDefenseTarget, rank: card.rank, suit: card.suit });
+        sendAction('defend', { attackIdx: selectedDefenseTarget, rank: card.rank, suit: card.suit });
       } else {
         setSelectedCard(selectedCard === idx ? null : idx);
       }
@@ -133,8 +174,11 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
       <div className="game-header">
         <h2>&#9824; DURAK &#9829;</h2>
         <span className="room-code">{roomCode}</span>
+        <span className={'ws-badge ' + (connected ? 'ws-connected' : 'ws-disconnected')}>
+          {connected ? 'Live' : 'Reconnecting...'}
+        </span>
         <button className="leave-btn" onClick={onLeave}>Leave</button>
-          <button className="leave-btn" onClick={() => setShowDebug(!showDebug)} style={{marginLeft: "8px"}}>{showDebug ? "Hide Debug" : "Debug"}</button>
+        <button className="leave-btn" onClick={() => setShowDebug(!showDebug)} style={{marginLeft: "8px"}}>{showDebug ? "Hide Debug" : "Debug"}</button>
       </div>
 
       {game.lastAction && <div className="last-action">{game.lastAction}</div>}
@@ -209,7 +253,7 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
         {game.gameState === 'ATTACKING' && game.attackerIdx === myIndex && (
           <button className="action-btn action-btn-throw" disabled={selectedCard === null} onClick={() => {
             const card = myHand[selectedCard];
-            doAction('attack', { rank: card.rank, suit: card.suit });
+            sendAction('attack', { rank: card.rank, suit: card.suit });
           }}>
             Attack
           </button>
@@ -219,11 +263,11 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
           <>
             <button className="action-btn action-btn-beat" disabled={selectedCard === null || selectedDefenseTarget === null} onClick={() => {
               const card = myHand[selectedCard];
-              doAction('defend', { attackIdx: selectedDefenseTarget, rank: card.rank, suit: card.suit });
+              sendAction('defend', { attackIdx: selectedDefenseTarget, rank: card.rank, suit: card.suit });
             }}>
               Beat
             </button>
-            <button className="action-btn action-btn-take" onClick={() => doAction('take', {})}>
+            <button className="action-btn action-btn-take" onClick={() => sendAction('take', {})}>
               Take
             </button>
           </>
@@ -232,14 +276,14 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
         {game.gameState === 'THROWING_IN' && canThrowIn && (
           <button className="action-btn action-btn-throw" disabled={selectedCard === null} onClick={() => {
             const card = myHand[selectedCard];
-            doAction('throw', { rank: card.rank, suit: card.suit });
+            sendAction('throw', { rank: card.rank, suit: card.suit });
           }}>
             Throw
           </button>
         )}
 
         {game.gameState === 'THROWING_IN' && game.defenderIdx !== myIndex && (
-          <button className="action-btn action-btn-pass" onClick={() => doAction('pass', {})}>
+          <button className="action-btn action-btn-pass" onClick={() => sendAction('pass', {})}>
             Pass
           </button>
         )}

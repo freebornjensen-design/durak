@@ -68,46 +68,7 @@ public class GameController {
 
     @GetMapping("/state/{roomCode}")
     public ResponseEntity<Map<String, Object>> getState(@PathVariable String roomCode) {
-        DurakEngine engine = gameService.getEngine(roomCode);
-        if (engine == null) {
-            // Return players list even if game not started
-            List<String> players = gameService.getPlayers(roomCode);
-            Map<String, Object> waiting = new HashMap<>();
-            waiting.put("gameState", "WAITING");
-            waiting.put("players", players != null ? players : new ArrayList<>());
-            return ResponseEntity.ok(waiting);
-        }
-        Map<String, Object> state = new HashMap<>();
-        state.put("gameState", engine.getGameState());
-        state.put("attackerIdx", engine.getAttackerIdx());
-        state.put("defenderIdx", engine.getDefenderIdx());
-        state.put("trumpSuit", engine.getTrump().name());
-        state.put("turnNumber", engine.getTurnNumber());
-        state.put("deckSize", engine.getDeckSize());
-        state.put("lastAction", engine.getLastAction());
-        state.put("actionLog", engine.getActionLog());
-        state.put("tableCards", engine.getTableCards());
-        state.put("players", gameService.getPlayers(roomCode));
-
-        List<List<Map<String, Object>>> hands = new ArrayList<>();
-        for (int i = 0; i < gameService.getPlayers(roomCode).size(); i++) {
-            List<Map<String, Object>> hand = new ArrayList<>();
-            if (engine.getHand(i) != null) {
-                for (var card : engine.getHand(i)) {
-                    Map<String, Object> cm = new HashMap<>();
-                    cm.put("rank", card.getRank().name());
-                    cm.put("suit", card.getSuit().name());
-                    hand.add(cm);
-                }
-            }
-            hands.add(hand);
-        }
-        state.put("hands", hands);
-
-        if ("FINISHED".equals(engine.getGameState())) {
-            state.put("foolIdx", engine.getDefenderIdx());
-        }
-        return ResponseEntity.ok(state);
+        return ResponseEntity.ok(gameService.buildStateMap(roomCode));
     }
 
     @PostMapping("/attack")
