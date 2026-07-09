@@ -202,7 +202,14 @@ public class DurakEngine {
 
     public boolean canThrowIn(int playerIdx) {
         if (!gameState.equals("THROWING_IN")) return false;
-        Set<Rank> ranks = tableCards.stream().map(tc -> tc.getAttackCard().getRank()).collect(Collectors.toSet());
+        Set<Rank> ranks = tableCards.stream()
+            .flatMap(tc -> {
+                Set<Rank> r = new HashSet<>();
+                r.add(tc.getAttackCard().getRank());
+                if (tc.getDefenseCard() != null) r.add(tc.getDefenseCard().getRank());
+                return r.stream();
+            })
+            .collect(Collectors.toSet());
         return playerHands.get(playerIdx).stream().anyMatch(c -> ranks.contains(c.getRank()));
     }
 
@@ -213,7 +220,12 @@ public class DurakEngine {
         List<Card> hand = playerHands.get(playerIdx);
         if (!hand.contains(card)) return false;
         Set<Rank> tableRanks = tableCards.stream()
-            .map(tc -> tc.getAttackCard().getRank())
+            .flatMap(tc -> {
+                Set<Rank> r = new HashSet<>();
+                r.add(tc.getAttackCard().getRank());
+                if (tc.getDefenseCard() != null) r.add(tc.getDefenseCard().getRank());
+                return r.stream();
+            })
             .collect(Collectors.toSet());
         if (!tableRanks.contains(card.getRank())) return false;
         hand.remove(card);
