@@ -208,7 +208,8 @@ public class GameController {
 
     @PostMapping("/deploy-webhook")
     public ResponseEntity<Map<String, Object>> deployWebhook(@RequestBody String body,
-                                                              @RequestHeader(value="X-Hub-Signature-256", required=false) String signature) {
+                                                              @RequestHeader(value="X-Hub-Signature-256", required=false) String signature,
+                                                              @RequestHeader(value="X-GitHub-Event", required=false) String event) {
         Map<String, Object> res = new HashMap<>();
         try {
             // Validate HMAC signature
@@ -221,6 +222,13 @@ public class GameController {
                 res.put("success", false);
                 res.put("error", "Missing signature");
                 return ResponseEntity.status(401).body(res);
+            }
+            // Only run deploy on push events
+            if (!"push".equals(event)) {
+                res.put("success", true);
+                res.put("message", "Ignored non-push event: " + event);
+                System.out.println("[WEBHOOK] Ignored non-push event: " + event);
+                return ResponseEntity.ok(res);
             }
             String expectedSig = "sha256=" + hmacSha256(body, WEBHOOK_SECRET);
             if (!expectedSig.equals(signature)) {
@@ -249,7 +257,7 @@ public class GameController {
             });
             thread.setDaemon(true);
             // Log webhook call
-            System.out.println("[WEBHOOK] Deploy triggered by " + java.net.InetAddress.getLocalHost().getHostAddress());
+            System.out.println("[WEBHOOK] Deploy triggered, event=" + event);
             thread.start();
             res.put("success", true);
             res.put("message", "Deploy started");
