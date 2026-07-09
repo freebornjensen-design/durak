@@ -160,6 +160,17 @@ public class GameService {
                     }
                 } else if ("THROWING_IN".equals(currentState) && engine.getDefenderIdx() != i) {
                     if (engine.hasPassed(i)) continue;
+                    // Don't auto-process AI if a human non-defender hasn't passed yet
+                    boolean hasHumanNonDefender = false;
+                    for (int k = 0; k < players.size(); k++) {
+                        if (!players.get(k).endsWith("-AI") && k != engine.getDefenderIdx() && !engine.hasPassed(k)) {
+                            hasHumanNonDefender = true;
+                            break;
+                        }
+                    }
+                    if (hasHumanNonDefender) {
+                        continue;
+                    }
                     if (engine.canThrowIn(i) && Math.random() > 0.5) {
                         var hand = engine.getHand(i);
                         if (hand != null) {
@@ -193,7 +204,7 @@ public class GameService {
         }
         // Cascade AI turns: if AI changed game state, check for more AI actions
         String newState = engine.getGameState();
-        boolean hasPendingAi = !newState.equals(state) || "ATTACKING".equals(newState) || ("THROWING_IN".equals(newState) && engine.hasUnpassedThrowers());
+        boolean hasPendingAi = !newState.equals(state) || "ATTACKING".equals(newState) || "DEFENDING".equals(newState) || ("THROWING_IN".equals(newState) && engine.hasUnpassedThrowers());
         if (!actions.isEmpty() && hasPendingAi) {
             int depth = 0;
             while (depth < 100) {
@@ -235,6 +246,18 @@ public class GameService {
                             }
                         } else if ("THROWING_IN".equals(s) && engine.getDefenderIdx() != j) {
                             if (engine.hasPassed(j)) continue;
+                            // Don't auto-process AI if a human non-defender hasn't passed yet
+                            boolean hasHumanNonDefender = false;
+                            for (int k = 0; k < players.size(); k++) {
+                                if (!players.get(k).endsWith("-AI") && k != engine.getDefenderIdx() && !engine.hasPassed(k)) {
+                                    hasHumanNonDefender = true;
+                                    break;
+                                }
+                            }
+                            if (hasHumanNonDefender) {
+                                // Skip AI auto-throw - let human decide first
+                                continue;
+                            }
                             if (engine.canThrowIn(j) && Math.random() > 0.5) {
                                 var h = engine.getHand(j);
                                 if (h != null) {
