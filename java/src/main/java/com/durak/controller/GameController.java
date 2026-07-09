@@ -8,6 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.*;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.util.*;
 
 @RestController
@@ -15,6 +18,8 @@ import java.util.*;
 public class GameController {
     @Autowired
     private GameService gameService;
+
+    private static final String WEBHOOK_SECRET = "durak-deploy-secret-2024";
 
     @PostMapping("/create")
     public ResponseEntity<Map<String, Object>> createRoom(@RequestBody Map<String, Object> body) {
@@ -201,6 +206,52 @@ public class GameController {
         return ResponseEntity.ok(dbg);
     }
 
+    @PostMapping("/deploy-webhook")
+    public ResponseEntity<Map<String, Object>> deployWebhook(@RequestBody String body,
+                                                              @RequestHeader("X-Hub-Signature-256") Optional<String> signature) {
+        Map<String, Object> res = new HashMap<>();
+        try {
+            // Validate HMAC signature
+            if (signature.isEmpty()) {
+                res.put("success", false);
+                res.put("error", "Missing signature");
+                return ResponseEntity.status(401).body(res);
+            }
+            String expectedSig = "sha256=" + hmacSha256(body, WEBHOOK_SECRET);
+            if (!expectedSig.equals(signature.get())) {
+                res.put("success", false);
+                res.put("error", "Invalid signature");
+                return ResponseEntity.status(401).body(res);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder("/var/www/durak/deploy.sh");
+            pb.directory(new File("/var/www/durak"));
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            // Read output in background to avoid blocking
+            new Thread(() -> {
+                try {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        System.out.println("[WEBHOOK] " + line);
+                    }
+                    p.waitFor();
+                    System.out.println("[WEBHOOK] Deploy exit code: " + p.exitValue());
+                } catch (Exception e) {
+                    System.err.println("[WEBHOOK] Error: " + e.getMessage());
+                }
+            }).start();
+            res.put("success", true);
+            res.put("message", "Deploy started");
+        } catch (Exception e) {
+            res.put("success", false);
+            res.put("error", e.getMessage());
+        }
+        return ResponseEntity.ok(res);
+    }
+
+
     private Card findCard(DurakEngine engine, int playerIdx, String rank, String suit) {
         if (engine.getHand(playerIdx) == null) return null;
         for (var card : engine.getHand(playerIdx)) {
@@ -210,4 +261,16 @@ public class GameController {
         }
         return null;
     }
+    private String hmacSha256(String data, String secret) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        SecretKeySpec secretKeySpec = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256");
+        mac.init(secretKeySpec);
+        byte[] rawHmac = mac.doFinal(data.getBytes("UTF-8"));
+        StringBuilder sb = new StringBuilder();
+        for (byte b : rawHmac) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
 }
