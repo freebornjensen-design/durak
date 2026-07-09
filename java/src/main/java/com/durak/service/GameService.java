@@ -176,16 +176,19 @@ public class GameService {
                         if (hand != null) {
                             boolean found = false;
                             var handCopy = new java.util.ArrayList<>(hand);
+                            // Collect all valid throw-in ranks (attack + defense cards)
+                            java.util.Set<Card.Rank> validRanks = new java.util.HashSet<>();
+                            for (var tc : engine.getTableCards()) {
+                                validRanks.add(tc.getAttackCard().getRank());
+                                if (tc.getDefenseCard() != null) validRanks.add(tc.getDefenseCard().getRank());
+                            }
                             for (var card : handCopy) {
                                 if (found) break;
-                                for (var tc : engine.getTableCards()) {
-                                    if (card.getRank() == tc.getAttackCard().getRank()) {
-                                        engine.throwCard(i, card);
-                                        actions.put("aiAction", "AI throws " + card.toDisplayString());
-                                        found = true;
-                                        currentState = engine.getGameState();
-                                        break;
-                                    }
+                                if (validRanks.contains(card.getRank())) {
+                                    engine.throwCard(i, card);
+                                    actions.put("aiAction", "AI throws " + card.toDisplayString());
+                                    found = true;
+                                    currentState = engine.getGameState();
                                 }
                             }
                             if (!found) {
@@ -263,16 +266,19 @@ public class GameService {
                                 if (h != null) {
                                     boolean found = false;
                                     var hCopy = new java.util.ArrayList<>(h);
+                                    // Collect all valid throw-in ranks (attack + defense cards)
+                                    java.util.Set<Card.Rank> validRanks = new java.util.HashSet<>();
+                                    for (var tc : engine.getTableCards()) {
+                                        validRanks.add(tc.getAttackCard().getRank());
+                                        if (tc.getDefenseCard() != null) validRanks.add(tc.getDefenseCard().getRank());
+                                    }
                                     for (var card : hCopy) {
                                         if (found) break;
-                                        for (var tc : engine.getTableCards()) {
-                                            if (card.getRank() == tc.getAttackCard().getRank()) {
-                                                engine.throwCard(j, card);
-                                                actions.put("aiCascade", "AI throws " + card.toDisplayString());
-                                                found = true;
-                                                acted = true;
-                                                break;
-                                            }
+                                        if (validRanks.contains(card.getRank())) {
+                                            engine.throwCard(j, card);
+                                            actions.put("aiCascade", "AI throws " + card.toDisplayString());
+                                            found = true;
+                                            acted = true;
                                         }
                                     }
                                     if (!found) {
