@@ -19,7 +19,7 @@ public class GameController {
     @Autowired
     private GameService gameService;
 
-    private static final String WEBHOOK_SECRET = "durak-deploy-secret-2024";
+    private static final String WEBHOOK_SECRET = System.getenv().getOrDefault("WEBHOOK_SECRET", "durak-deploy-secret-2024");
 
     @PostMapping("/create")
     public ResponseEntity<Map<String, Object>> createRoom(@RequestBody Map<String, Object> body) {
@@ -208,17 +208,17 @@ public class GameController {
 
     @PostMapping("/deploy-webhook")
     public ResponseEntity<Map<String, Object>> deployWebhook(@RequestBody String body,
-                                                              @RequestHeader("X-Hub-Signature-256") Optional<String> signature) {
+                                                              @RequestHeader(value="X-Hub-Signature-256", required=false) String signature) {
         Map<String, Object> res = new HashMap<>();
         try {
             // Validate HMAC signature
-            if (signature.isEmpty()) {
+            if (signature == null || signature.isEmpty()) {
                 res.put("success", false);
                 res.put("error", "Missing signature");
                 return ResponseEntity.status(401).body(res);
             }
             String expectedSig = "sha256=" + hmacSha256(body, WEBHOOK_SECRET);
-            if (!expectedSig.equals(signature.get())) {
+            if (!expectedSig.equals(signature)) {
                 res.put("success", false);
                 res.put("error", "Invalid signature");
                 return ResponseEntity.status(401).body(res);
