@@ -1,0 +1,25 @@
+# Java
+java/target/
+*.jar
+*.war
+*.class
+
+# React
+react/node_modules/
+react/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs
+*.log
+
+# Env
+.env
+.env.local
