@@ -19,7 +19,7 @@ public class GameController {
     @Autowired
     private GameService gameService;
 
-    private static final String WEBHOOK_SECRET = System.getenv().getOrDefault("WEBHOOK_SECRET", "durak-deploy-secret-2024");
+    private static final String WEBHOOK_SECRET = System.getenv("WEBHOOK_SECRET");
 
     @PostMapping("/create")
     public ResponseEntity<Map<String, Object>> createRoom(@RequestBody Map<String, Object> body) {
@@ -212,6 +212,11 @@ public class GameController {
         Map<String, Object> res = new HashMap<>();
         try {
             // Validate HMAC signature
+            if (WEBHOOK_SECRET == null) {
+                res.put("success", false);
+                res.put("error", "Server misconfigured: WEBHOOK_SECRET not set");
+                return ResponseEntity.status(500).body(res);
+            }
             if (signature == null || signature.isEmpty()) {
                 res.put("success", false);
                 res.put("error", "Missing signature");
@@ -229,7 +234,7 @@ public class GameController {
             pb.redirectErrorStream(true);
             Process p = pb.start();
             // Read output in background to avoid blocking
-            new Thread(() -> {
+            Thread thread = new Thread(() -> {
                 try {
                     BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
                     String line;
@@ -241,7 +246,11 @@ public class GameController {
                 } catch (Exception e) {
                     System.err.println("[WEBHOOK] Error: " + e.getMessage());
                 }
-            }).start();
+            });
+            thread.setDaemon(true);
+            // Log webhook call
+            System.out.println("[WEBHOOK] Deploy triggered by " + java.net.InetAddress.getLocalHost().getHostAddress());
+            thread.start();
             res.put("success", true);
             res.put("message", "Deploy started");
         } catch (Exception e) {
