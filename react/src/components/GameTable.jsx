@@ -28,11 +28,31 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
   const [waitingForGame, setWaitingForGame] = useState(true);
   const [showDebug, setShowDebug] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [dealing, setDealing] = useState(false);
+  const dealingRef = useRef(false);
   const stompClientRef = useRef(null);
   const myIndexRef = useRef(-1);
+  const prevGameRef = useRef(null);
 
   // Parse state from server
   const handleStateUpdate = useCallback((data) => {
+    const prev = prevGameRef.current;
+    // Detect deal: deckSize decreased = cards were dealt
+    if (prev && data.hands && prev.hands && !dealingRef.current) {
+      const prevDeck = prev.deckSize || 0;
+      const currDeck = data.deckSize || 0;
+      if (currDeck < prevDeck) {
+        // Cards were dealt - trigger animation
+        setDealing(true);
+        dealingRef.current = true;
+        setTimeout(() => {
+          setDealing(false);
+          dealingRef.current = false;
+        }, 1200);
+      }
+    }
+    prevGameRef.current = data;
+
     setGame(data);
     if (data.players) {
       setPlayers(data.players);
@@ -43,7 +63,7 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
         setWaitingForGame(false);
       }
     }
-  }, [playerName]);
+  }, [playerName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initial state fetch via REST
   const fetchInitialState = useCallback(async () => {
@@ -187,9 +207,35 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
         <div className="players-row" style={{ marginTop: '2rem' }}>
           {players.map((name, idx) => (
             idx !== myIndex ? (
-              <div key={idx} className={'player-tag ' + getPlayerClass(idx)}>
+              <div key={idx} className={'player-tag opponent-tag ' + getPlayerClass(idx)}>
                 <span>{name}</span>
-                <span className="player-card-count">{game.hands && game.hands[idx] ? game.hands[idx].length : 0} cards</span>
+                <div className="opponent-cards">
+                  {game.hands && game.hands[idx] ? (() => {
+                    const count = game.hands[idx].length;
+                    const maxShow = 5;
+                    const shown = Math.min(count, maxShow);
+                    return (
+                      <>
+                        {[...Array(shown)].map((_, ci) => (
+                          <img
+                            key={ci}
+                            src="/cards/backs.svg"
+                            className="opponent-card-back"
+                            style={{
+                              marginLeft: ci > 0 ? '-18px' : '0',
+                              zIndex: shown - ci,
+                              transform: `rotate(${(ci - (shown-1)/2) * 3}deg)`
+                            }}
+                            alt=""
+                          />
+                        ))}
+                        {count > maxShow ? (
+                          <span className="opponent-card-extra">+{count - maxShow}</span>
+                        ) : null}
+                      </>
+                    );
+                  })() : <span className="player-card-count">waiting...</span>}
+                </div>
               </div>
             ) : null
           ))}
@@ -244,6 +290,21 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
                     />
                   ));
                 })()}
+                {dealing && [...Array(6)].map((_, i) => (
+                  <img
+                    key={'fly-' + i}
+                    src="/cards/backs.svg"
+                    className="flying-card"
+                    style={{
+                      '--fly-delay': `${i * 0.08}s`,
+                      '--fly-angle': `${(Math.random() - 0.5) * 40}deg`,
+                      '--fly-target-x': `${(i - 2.5) * 60}px`,
+                      '--fly-target-y': `${120 + Math.random() * 60}px`,
+                      '--fly-rotate': `${Math.random() * 720 - 360}deg`
+                    }}
+                    alt=""
+                  />
+                ))}
               </div>
               <div className="deck-count-label">
                 {game.deckSize > 0 ? `${game.deckSize} cards` : 'Empty'}

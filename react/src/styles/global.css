@@ -80,6 +80,57 @@ body { font-family: 'Roboto', sans-serif; background: var(--dark); color: var(--
 .trump-card { width: 40px; height: 56px; border-radius: 4px; border: 2px solid var(--gold); }
 .deck-count { font-size: 0.85rem; color: var(--text-dim); }
 
+/* Opponent Cards (card backs) */
+.opponent-tag {
+  gap: 0.75rem;
+}
+.opponent-cards {
+  display: flex;
+  align-items: center;
+}
+.opponent-card-back {
+  width: 26px;
+  height: 36px;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  transition: all 0.3s ease;
+  object-fit: cover;
+}
+.opponent-card-extra {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-left: 2px;
+  font-weight: 600;
+}
+
+/* Flying Cards (deal animation) */
+.flying-card {
+  position: absolute;
+  width: 50px;
+  height: 70px;
+  border-radius: 4px;
+  z-index: 100;
+  pointer-events: none;
+  animation: dealFly 1s ease-out forwards;
+  animation-delay: var(--fly-delay);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+@keyframes dealFly {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(0, -20px) rotate(calc(var(--fly-angle) * 0.3)) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--fly-target-x), var(--fly-target-y)) rotate(var(--fly-rotate)) scale(0.6);
+  }
+}
+
 /* Visual Deck */
 .deck-visual {
   display: flex;
