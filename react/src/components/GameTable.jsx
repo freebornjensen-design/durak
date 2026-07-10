@@ -224,8 +224,32 @@ const GameTable = ({ roomCode, playerName, onLeave }) => {
               <span>Trump:</span>
               <img src={cardSvgFile({ suit: game.trumpSuit, rank: 'ACE' })} className="trump-card" alt="trump suit" />
             </div>
-            <span className="deck-count">Deck: {game.deckSize} cards</span>
-            <span className="deck-count">Turn #{game.turnNumber}</span>
+            <div className="deck-visual">
+              <div className="deck-stack" data-empty={game.deckSize === 0 ? 'true' : undefined}>
+                {(() => {
+                  const deckFill = Math.min((game.deckSize || 0) / 36, 1);
+                  return [...Array(8)].map((_, i) => (
+                    <img
+                      key={i}
+                      src="/cards/backs.svg"
+                      className="deck-card"
+                      style={{
+                        top: `${i * deckFill * 3}px`,
+                        left: `${i * deckFill * 0.6}px`,
+                        transform: `rotate(${(i - 3.5) * deckFill * 0.8}deg)`,
+                        zIndex: i,
+                        opacity: i < Math.ceil(deckFill * 8) ? 1 : 0.3
+                      }}
+                      alt=""
+                    />
+                  ));
+                })()}
+              </div>
+              <div className="deck-count-label">
+                {game.deckSize > 0 ? `${game.deckSize} cards` : 'Empty'}
+              </div>
+            </div>
+            <span className="turn-number">Turn #{game.turnNumber}</span>
           </div>
         </div>
 
